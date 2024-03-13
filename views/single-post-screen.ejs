@@ -36,7 +36,7 @@
     post.createdDate.getDate() %>
   </p>
 
-  <div class="body-content"><%= post.body %></div>
+  <div class="body-content"><%- filterUserHTML(post.body) %></div>
 </div>
 
 <!-- footer begins -->
