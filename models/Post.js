@@ -3,6 +3,19 @@ const ObjectId = require("mongodb").ObjectId
 const User = require("./User")
 const sanitizeHTML = require("sanitize-html")
 
+// create index on database collection if one doesn't already exist
+// postsCollection.createIndex({title: "text", body: "text"})
+
+// see list of all indexes on collection
+// async function checkIndexes() {
+//   const indexes = await postsCollection.indexes()
+//   console.log(indexes)
+// }
+// checkIndexes()
+
+//delete an index by name
+// postsCollection.dropIndex("namehere")
+
 let Post = function (data, userid, requestedPostId) {
   this.data = data
   this.errors = []
@@ -94,33 +107,40 @@ Post.prototype.actuallyUpdate = function () {
   })
 }
 
-Post.reusablePostQuery = function (uniqueOperations, visitorId) {
+Post.reusablePostQuery = function (
+  uniqueOperations,
+  visitorId,
+  finalOperations = []
+) {
   return new Promise(async function (resolve, reject) {
-    let aggOperations = uniqueOperations.concat([
-      {
-        $lookup: {
-          from: "users",
-          localField: "author",
-          foreignField: "_id",
-          as: "authorDocument"
+    let aggOperations = uniqueOperations
+      .concat([
+        {
+          $lookup: {
+            from: "users",
+            localField: "author",
+            foreignField: "_id",
+            as: "authorDocument"
+          }
+        },
+        {
+          $project: {
+            title: 1,
+            body: 1,
+            createdDate: 1,
+            authorId: "$author",
+            author: { $arrayElemAt: ["$authorDocument", 0] }
+          }
         }
-      },
-      {
-        $project: {
-          title: 1,
-          body: 1,
-          createdDate: 1,
-          authorId: "$author",
-          author: { $arrayElemAt: ["$authorDocument", 0] }
-        }
-      }
-    ])
+      ])
+      .concat(finalOperations)
 
     let posts = await postsCollection.aggregate(aggOperations).toArray()
 
     //clean up author property in each post object
     posts = posts.map(function (post) {
       post.isVisitorOwner = post.authorId.equals(visitorId)
+      post.authorId = undefined
       post.author = {
         username: post.author.username,
         avatar: new User(post.author, true).avatar
@@ -172,6 +192,21 @@ Post.delete = function (postIdToDelete, currentUserId) {
         reject()
       }
     } catch {
+      reject()
+    }
+  })
+}
+
+Post.search = function (searchTerm) {
+  return new Promise(async (resolve, reject) => {
+    if (typeof searchTerm == "string") {
+      let posts = await Post.reusablePostQuery(
+        [{ $match: { $text: { $search: searchTerm } } }],
+        undefined,
+        [{ $sort: { score: { $meta: "textScore" } } }]
+      )
+      resolve(posts)
+    } else {
       reject()
     }
   })
