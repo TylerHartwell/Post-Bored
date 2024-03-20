@@ -77,6 +77,17 @@ exports.login = (req, res) => {
       })
     })
 }
+exports.apiLogin = (req, res) => {
+  let user = new User(req.body)
+  user
+    .login()
+    .then(function (result) {
+      res.json("nice one")
+    })
+    .catch(function (err) {
+      res.json("incorrect")
+    })
+}
 exports.logout = (req, res) => {
   req.session.destroy(function () {
     res.redirect("/")
